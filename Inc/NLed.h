@@ -71,12 +71,15 @@
             ldAccesses access;
             ldDrivers driver;
             uint32_t interval;
+            uint32_t duty;
             uint32_t burst;
 
             //-------------------------
             ldStatus previous_status;
             uint8_t pin_status;
             uint32_t counter;
+            uint32_t on_time;
+            uint32_t off_time;
 
         //-------------------------------------------------
         private:
@@ -91,6 +94,8 @@
             ldDrivers GetDriver();
             void SetInterval(uint32_t);
             uint32_t GetInterval();
+            void SetDuty(uint32_t);
+            uint32_t GetDuty();
             void SetBurst(uint32_t);
             uint32_t GetBurst();
 
@@ -162,6 +167,14 @@
              * - Default value: 100 (ms)
              */
             property<NLed, uint32_t, propReadWrite>      Interval; // 100 (ms)
+
+            /**
+             * @brief This property defines the "ON-PHASE of blink interval", i.e. the time the LED remains ON during 'Interval'.
+             * The "duty" time is given in percentage of the 'Interval' time (%).
+             * This property provides READ and WRITE access.
+             * - Default value: 50 (%)
+             */
+            property<NLed, uint32_t, propReadWrite>      Duty; // 50 (%)
 
             /**
              * @brief This property assigns a number of blinks the LED is forced execute.

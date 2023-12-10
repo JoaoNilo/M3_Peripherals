@@ -1,9 +1,10 @@
 //==============================================================================
 #include "NLed.h"
 
-#define LED_INTERVAL_DEFAULT	 	100 	//ms
-#define LED_INTERVAL_MAX	 		10000 	//ms
-#define LED_INTERVAL_MIN	 		25 		//ms
+#define LED_INTERVAL_DEFAULT	 	100 	// ms
+#define LED_DUTY_DEFAULT	 		50 		// %
+#define LED_INTERVAL_MAX	 		10000 	// ms
+#define LED_INTERVAL_MIN	 		25 		// ms
 #define LED_BURST_MIN	 			2
 #define LED_BURST_MAX	 			100
 
@@ -28,6 +29,10 @@ NLed::NLed(GPIO_TypeDef* Porta, uint32_t Pino):NOutput(Porta, Pino){
     Interval.set(&NLed::SetInterval);
     Interval.get(&NLed::GetInterval);
 
+    Duty.setOwner(this);
+    Duty.set(&NLed::SetDuty);
+    Duty.get(&NLed::GetDuty);
+
     Burst.setOwner(this);
     Burst.set(&NLed::SetBurst);
     Burst.get(&NLed::GetBurst);
@@ -37,11 +42,13 @@ NLed::NLed(GPIO_TypeDef* Porta, uint32_t Pino):NOutput(Porta, Pino){
     status = ldOff;
 	previous_status = ldOff;
     driver = ldNormal;
-    interval = LED_INTERVAL_DEFAULT;
     burst = 0;
-    counter = 0;
     pin_status = 0;
-    enabled = true;    
+    enabled = true;
+    access = ldImmediate;
+    duty = LED_DUTY_DEFAULT;
+
+    SetInterval(LED_INTERVAL_DEFAULT);
 }
 
 //------------------------------------------------------------------------------
@@ -78,11 +85,29 @@ void NLed::SetInterval(uint32_t T){
 	if(T < LED_INTERVAL_MIN){ T = LED_INTERVAL_MIN;}
 	else if(T > LED_INTERVAL_MAX){ T = LED_INTERVAL_MAX;}
     interval = T;
+    on_time = ((T * duty) / 100);
+    off_time = T - on_time;
+
+    if(status == ldSignaling){ counter = interval;}
+    else { counter = on_time;}
 }
 
 //------------------------------------------------------------------------------
 uint32_t NLed::GetInterval(){
     return(interval);
+}
+
+//------------------------------------------------------------------------------
+void NLed::SetDuty(uint32_t D){
+	if(D < 1){ D = 1;}
+	else if(D > 100){ D = 100;}
+    duty = D;
+    SetInterval(interval);
+}
+
+//------------------------------------------------------------------------------
+uint32_t NLed::GetDuty(){
+    return(duty);
 }
 
 //------------------------------------------------------------------------------
@@ -131,21 +156,32 @@ void NLed::Notify(NMESSAGE* msg){
                 Repaint(status);
                 break;
             case NM_TIMETICK:
-                if((status == ldSignaling)||(status ==ldBlinking)){
-                    if(++counter>=interval){
-                        counter = 0;
-                        if(status ==ldBlinking){
-                            pin_status = !pin_status;
+
+                if(status ==ldBlinking){
+                    if(counter>0){ counter--;}
+                    else {
+                        if(pin_status == ldOn){
+                            pin_status = ldOff;
+                            counter = off_time;
                         } else {
-                            if(burst > 0){
-                                pin_status = !pin_status; burst--;
-                            } else {
-                                status = previous_status;
-                                if(OnBurstFinished != NULL){ OnBurstFinished();}
-                            }
+                            pin_status = ldOn;
+                            counter = on_time;
                         }
-                        if(access == ldImmediate){ Repaint(status);}
                     }
+                    if(access == ldImmediate){ Repaint(status);}
+
+                } else if(status == ldSignaling){
+                    if(counter > 0){ counter--;}
+                    else {
+                        counter = interval;
+						if(burst > 0){
+							pin_status = !pin_status; burst--;
+						} else {
+							status = previous_status;
+							if(OnBurstFinished != NULL){ OnBurstFinished();}
+						}
+                    }
+                    if(access == ldImmediate){ Repaint(status);}
                 }
                 break;
             default: break;
